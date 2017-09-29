@@ -112,8 +112,11 @@ public final class Hc {
 	private static boolean isTimeout(Throwable e) {
 		StringWriter out = new StringWriter();
 		e.printStackTrace(new PrintWriter(out));
-		if (out.toString().contains("SocketTimeoutException")) {
+		String error = out.toString();
+		if (error.contains("SocketTimeoutException") || error.contains("ConnectException")) {
 			return true;
+		} else {
+			System.err.println(error);
 		}
 		return false;
 	}

@@ -94,6 +94,12 @@ public class HttpApiInfo {
 		this.isOnline = isOnline;
 	}
 
+	public HttpApiInfo(String contextPath, Boolean isOnline) {
+		super();
+		this.contextPath = contextPath;
+		this.isOnline = isOnline;
+	}
+
 	public HttpApiInfo(String scheme, String host, Integer port, String contextPath) {
 		super();
 		this.scheme = scheme;
