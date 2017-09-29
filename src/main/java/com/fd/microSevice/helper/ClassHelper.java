@@ -15,6 +15,8 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
@@ -93,15 +95,8 @@ public final class ClassHelper {
 		try {
 			Class<?> contr = Class.forName(cln);
 			if (contr.isAnnotationPresent(Controller.class) || contr.isAnnotationPresent(RestController.class)) {
-				RequestMapping crm = null;
-				String[] classpaths = null;
+				String[] classpaths = getpaths(contr);
 				RestApi ra = null;
-				if (contr.isAnnotationPresent(RequestMapping.class)) {
-					crm = contr.getAnnotation(RequestMapping.class);
-					if (crm.value().length > 0 || crm.path().length > 0) {
-						classpaths = crm.value().length > 0 ? crm.value() : crm.path();
-					}
-				}
 				if (contr.isAnnotationPresent(RestApi.class)) {
 					ra = contr.getAnnotation(RestApi.class);
 				}
@@ -111,7 +106,8 @@ public final class ClassHelper {
 					if (m.isAnnotationPresent(RestApi.class)) {
 						mra = m.getAnnotation(RestApi.class);
 					}
-					if (m.isAnnotationPresent(RequestMapping.class)) {
+					if (m.isAnnotationPresent(RequestMapping.class) || m.isAnnotationPresent(PostMapping.class)
+							|| m.isAnnotationPresent(GetMapping.class)) {
 						if (mra == null && ra == null) {
 							if (enableaotuscan) {
 								collect(ais, classpaths, m);
@@ -136,30 +132,81 @@ public final class ClassHelper {
 		}
 	}
 
+	private static String[] getpaths(Class<?> contr) {
+		String[] classpaths = null;
+		if (contr.isAnnotationPresent(RequestMapping.class)) {
+			RequestMapping crm = contr.getAnnotation(RequestMapping.class);
+			String[] value = crm.value();
+			String[] path = crm.path();
+			classpaths = getmppaths(classpaths, value, path);
+		} else {
+			if (contr.isAnnotationPresent(GetMapping.class)) {
+				GetMapping crm = contr.getAnnotation(GetMapping.class);
+				String[] value = crm.value();
+				String[] path = crm.path();
+				classpaths = getmppaths(classpaths, value, path);
+
+			} else if (contr.isAnnotationPresent(PostMapping.class)) {
+				PostMapping crm = contr.getAnnotation(PostMapping.class);
+				String[] value = crm.value();
+				String[] path = crm.path();
+				classpaths = getmppaths(classpaths, value, path);
+
+			}
+		}
+		return classpaths;
+	}
+
+	private static String[] getmppaths(String[] classpaths, String[] value, String[] path) {
+		if (value.length > 0 || path.length > 0) {
+			classpaths = value.length > 0 ? value : path;
+		}
+		return classpaths;
+	}
+
 	private static void collect(Set<ApiInfo> ais, String[] classpaths, Method m) {
-		RequestMapping pm = m.getAnnotation(RequestMapping.class);
-		if (pm.value().length > 0) {
-			for (String mp : pm.value()) {
+		if (m.isAnnotationPresent(RequestMapping.class)) {
+			RequestMapping pm = m.getAnnotation(RequestMapping.class);
+			RequestMethod[] method = pm.method();
+			String[] value = pm.value();
+			collectApiInfo(ais, classpaths, method, value);
+		} else if (m.isAnnotationPresent(GetMapping.class)) {
+			GetMapping pm = m.getAnnotation(GetMapping.class);
+			RequestMethod[] method = new RequestMethod[] { RequestMethod.GET };
+			String[] value = pm.value();
+			collectApiInfo(ais, classpaths, method, value);
+		} else if (m.isAnnotationPresent(PostMapping.class)) {
+			PostMapping pm = m.getAnnotation(PostMapping.class);
+			RequestMethod[] method = new RequestMethod[] { RequestMethod.POST };
+			String[] value = pm.value();
+			collectApiInfo(ais, classpaths, method, value);
+
+		}
+	}
+
+	private static void collectApiInfo(Set<ApiInfo> ais, String[] classpaths, RequestMethod[] method, String[] value) {
+		if (value.length > 0) {
+			for (String mp : value) {
 				if (classpaths != null) {
 					for (String clspath : classpaths)
-						format(ais, clspath, pm, mp);
+						format(ais, clspath, method, mp);
 				} else {
-					format(ais, "", pm, mp);
+					format(ais, "", method, mp);
 
 				}
 			}
 		} else {
 			if (classpaths != null) {
 				for (String name : classpaths) {
-					add(ais, pm, name);
+					add(ais, method, name);
 				}
 			} else {
-				add(ais, pm, "");
+				add(ais, method, "");
 			}
 		}
 	}
 
-	private static void format(Set<ApiInfo> ais, String clspath, RequestMapping pm, String mp) {
+	private static void format(Set<ApiInfo> ais, String clspath, RequestMethod[] method, String mp) {
 		String name = String.format("%s/%s", clspath, mp);
 		if (name.startsWith("/")) {
 			name = name.replaceFirst("/", "");
@@ -167,13 +214,13 @@ public final class ClassHelper {
 		if (name.contains("//")) {
 			name = name.replaceFirst("//", "/");
 		}
-		add(ais, pm, name);
+		add(ais, method, name);
 	}
 
-	private static void add(Set<ApiInfo> ais, RequestMapping pm, String name) {
+	private static void add(Set<ApiInfo> ais, RequestMethod[] method, String name) {
 		name = getApiName(name);
-		if (pm.method().length > 0) {
-			for (RequestMethod mthod : pm.method()) {
+		if (method.length > 0) {
+			for (RequestMethod mthod : method) {
 				ais.add(new ApiInfo(name, mthod));
 			}
 		} else {
